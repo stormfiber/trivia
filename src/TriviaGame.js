@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 const TriviaGame = () => {
-  const [gameState, setGameState] = useState('setup');
+  const [gameState, setGameState] = useState('setup'); // setup, loading, playing, results
   const [categories, setCategories] = useState([]);
   const [difficulty, setDifficulty] = useState('medium');
   const [numQuestions, setNumQuestions] = useState(5);
@@ -35,26 +35,48 @@ const TriviaGame = () => {
 
     try {
       const categoriesStr = categories.join(', ');
-      const prompt = `Generate exactly ${numQuestions} trivia questions with the following specifications:
+
+      const prompt = `Generate exactly ${numQuestions} trivia questions.
+Each question must be:
+- Multiple choice with exactly 4 options
+- Have one correct answer
+- Include the category and difficulty level
 - Categories: ${categoriesStr}
 - Difficulty: ${difficulty}
-- Format: Multiple choice with 4 options`;
+
+Respond ONLY with a JSON object like this:
+{
+  "questions": [
+    {
+      "question": "Question text here",
+      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "correctAnswer": 0,
+      "category": "Category Name"
+    }
+  ]
+}`;
 
       const apiUrl = `https://gtech-api-xtp1.onrender.com/api/deepseek/r1?prompt=${encodeURIComponent(prompt)}&apikey=APIKEY`;
+
       const response = await fetch(apiUrl);
       const data = await response.json();
 
-      // Parse the questions JSON from API response
-      const jsonResponse = JSON.parse(data.text.parts[0].text);
+      if (data.status && data.text && data.text.parts && data.text.parts[0]?.text) {
+        const jsonResponse = JSON.parse(data.text.parts[0].text);
 
-      if (jsonResponse.questions && Array.isArray(jsonResponse.questions)) {
-        setQuestions(jsonResponse.questions);
-        setGameState('playing');
-        setCurrentQuestion(0);
-        setScore(0);
-        setAnswers([]);
+        if (jsonResponse.questions && Array.isArray(jsonResponse.questions)) {
+          setQuestions(jsonResponse.questions);
+          setGameState('playing');
+          setCurrentQuestion(0);
+          setScore(0);
+          setAnswers([]);
+          setSelectedAnswer(null);
+          setShowAnswer(false);
+        } else {
+          throw new Error('Invalid response format from API');
+        }
       } else {
-        throw new Error('Invalid response format from API');
+        throw new Error('API returned an error or unexpected format');
       }
     } catch (error) {
       console.error('Error generating questions:', error);
@@ -87,9 +109,7 @@ const TriviaGame = () => {
 
     setAnswers(newAnswers);
 
-    if (isCorrect) {
-      setScore(score + 1);
-    }
+    if (isCorrect) setScore(score + 1);
 
     if (currentQuestion + 1 < questions.length) {
       setCurrentQuestion(currentQuestion + 1);
@@ -110,16 +130,19 @@ const TriviaGame = () => {
     setShowAnswer(false);
   };
 
+  // --- RENDERING ---
+
   if (gameState === 'setup') {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mt-8 mb-8">
             <h1 className="text-6xl font-black mb-4 text-green-400">Trivia</h1>
-            <p className="text-xl text-gray-300">Test your knowledge with AI-generated trivia questions</p>
+            <p className="text-xl text-gray-300">Test your knowledge with API-generated trivia questions</p>
           </div>
 
           <div className="bg-gray-800 rounded-2xl p-8 shadow-2xl border-2 border-gray-700">
+            {/* Categories */}
             <div className="mb-8">
               <h2 className="text-2xl font-bold mb-4 text-green-400">Categories</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -139,6 +162,7 @@ const TriviaGame = () => {
               </div>
             </div>
 
+            {/* Difficulty */}
             <div className="mb-8">
               <h2 className="text-2xl font-bold mb-4 text-green-400">Difficulty</h2>
               <div className="flex gap-3">
@@ -158,6 +182,7 @@ const TriviaGame = () => {
               </div>
             </div>
 
+            {/* Number of Questions */}
             <div className="mb-8">
               <h2 className="text-2xl font-bold mb-4 text-green-400">Number of questions</h2>
               <div className="flex gap-3">
@@ -235,22 +260,32 @@ const TriviaGame = () => {
                   } else if (index === selectedAnswer && index !== question.correctAnswer) {
                     buttonClass += 'bg-red-500 text-white border-red-400 shadow-lg';
                   } else {
-                    buttonClass += 'bg-gray-700 text-white border-gray-600';
+                    buttonClass += 'bg-gray-600 text-gray-300 border-gray-500';
                   }
                 } else {
-                  buttonClass += index === selectedAnswer 
-                    ? 'bg-green-400 text-black border-green-400 shadow-lg' 
-                    : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600';
+                  if (selectedAnswer === index) {
+                    buttonClass += 'bg-green-500 text-black border-green-400 shadow-lg';
+                  } else {
+                    buttonClass += 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600';
+                  }
                 }
 
                 return (
                   <button
                     key={index}
-                    className={buttonClass}
-                    onClick={() => selectAnswer(index)}
+                    onClick={() => !showAnswer && selectAnswer(index)}
                     disabled={showAnswer}
+                    className={buttonClass}
                   >
-                    {option}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-black mr-3">{String.fromCharCode(65 + index)}.</span>
+                        {option}
+                      </div>
+                      <div className="text-xl">
+                        {showCheckmark && '✔️'}
+                      </div>
+                    </div>
                   </button>
                 );
               })}
@@ -260,7 +295,7 @@ const TriviaGame = () => {
               onClick={nextQuestion}
               className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl transition-all duration-200 shadow-xl"
             >
-              {showAnswer ? 'Next Question' : 'Check Answer'}
+              {currentQuestion + 1 === questions.length && showAnswer ? 'See results' : showAnswer ? 'Next question' : 'Check answer'}
             </button>
           </div>
         </div>
@@ -271,13 +306,15 @@ const TriviaGame = () => {
   if (gameState === 'results') {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 flex flex-col items-center justify-center">
-        <h1 className="text-6xl font-black text-green-400 mb-4">Your Score</h1>
-        <p className="text-3xl font-bold mb-8">{score} / {questions.length}</p>
+        <h2 className="text-6xl font-black text-green-400 mb-4">Game Over</h2>
+        <p className="text-xl text-gray-300 mb-8">
+          Your score: {score} / {questions.length}
+        </p>
         <button
           onClick={resetGame}
           className="bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl transition-all duration-200 shadow-xl"
         >
-          Play Again
+          Play again
         </button>
       </div>
     );
