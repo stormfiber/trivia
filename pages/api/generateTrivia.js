@@ -5,6 +5,7 @@ export default async function handler(req, res) {
 
   const { prompt } = req.body;
 
+  // Use server-side only env variable
   const ai = new GoogleGenAI({
     apiKey: process.env.GOOGLE_API_KEY,
   });
@@ -17,7 +18,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ text: response.text });
   } catch (err) {
-    console.error(err);
+    console.error('AI generation error:', err);
     res.status(500).json({ error: "Failed to generate questions" });
   }
 }
