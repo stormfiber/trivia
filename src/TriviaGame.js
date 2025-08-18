@@ -36,47 +36,41 @@ const TriviaGame = () => {
     try {
       const categoriesStr = categories.join(', ');
 
-      const prompt = `Generate exactly ${numQuestions} trivia questions.
-Each question must be:
-- Multiple choice with exactly 4 options
-- Have one correct answer
-- Include the category and difficulty level
-- Categories: ${categoriesStr}
-- Difficulty: ${difficulty}
-
-Respond ONLY with a JSON object like this:
+      const prompt = `Generate exactly ${numQuestions} trivia questions in the following categories: ${categoriesStr}.
+Each question should have 4 multiple-choice options and one correct answer.
+Return the result as a JSON object in this exact format:
 {
   "questions": [
     {
-      "question": "Question text here",
-      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "question": "Question text",
+      "options": ["Option1", "Option2", "Option3", "Option4"],
       "correctAnswer": 0,
-      "category": "Category Name"
+      "category": "CategoryName"
     }
   ]
-}`;
+}
+Do not include anything else outside the JSON object.`;
 
-      const apiUrl = `https://gtech-api-xtp1.onrender.com/api/deepseek/r1?prompt=${encodeURIComponent(prompt)}&apikey=APIKEY`;
+      // Call server-side API
+      const response = await fetch('/api/generateTrivia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
 
-      const response = await fetch(apiUrl);
       const data = await response.json();
+      const jsonResponse = JSON.parse(data.text);
 
-      if (data.status && data.text && data.text.parts && data.text.parts[0]?.text) {
-        const jsonResponse = JSON.parse(data.text.parts[0].text);
-
-        if (jsonResponse.questions && Array.isArray(jsonResponse.questions)) {
-          setQuestions(jsonResponse.questions);
-          setGameState('playing');
-          setCurrentQuestion(0);
-          setScore(0);
-          setAnswers([]);
-          setSelectedAnswer(null);
-          setShowAnswer(false);
-        } else {
-          throw new Error('Invalid response format from API');
-        }
+      if (jsonResponse.questions && Array.isArray(jsonResponse.questions)) {
+        setQuestions(jsonResponse.questions);
+        setGameState('playing');
+        setCurrentQuestion(0);
+        setScore(0);
+        setAnswers([]);
+        setSelectedAnswer(null);
+        setShowAnswer(false);
       } else {
-        throw new Error('API returned an error or unexpected format');
+        throw new Error('Invalid response format from AI');
       }
     } catch (error) {
       console.error('Error generating questions:', error);
@@ -85,9 +79,7 @@ Respond ONLY with a JSON object like this:
     }
   };
 
-  const selectAnswer = (answerIndex) => {
-    setSelectedAnswer(answerIndex);
-  };
+  const selectAnswer = (answerIndex) => setSelectedAnswer(answerIndex);
 
   const nextQuestion = () => {
     if (selectedAnswer === null) {
@@ -101,14 +93,7 @@ Respond ONLY with a JSON object like this:
     }
 
     const isCorrect = selectedAnswer === questions[currentQuestion].correctAnswer;
-    const newAnswers = [...answers, {
-      questionIndex: currentQuestion,
-      selectedAnswer,
-      isCorrect
-    }];
-
-    setAnswers(newAnswers);
-
+    setAnswers([...answers, { questionIndex: currentQuestion, selectedAnswer, isCorrect }]);
     if (isCorrect) setScore(score + 1);
 
     if (currentQuestion + 1 < questions.length) {
@@ -122,89 +107,80 @@ Respond ONLY with a JSON object like this:
 
   const resetGame = () => {
     setGameState('setup');
+    setCategories([]);
+    setDifficulty('medium');
+    setNumQuestions(5);
+    setQuestions([]);
     setCurrentQuestion(0);
     setSelectedAnswer(null);
     setScore(0);
     setAnswers([]);
-    setQuestions([]);
     setShowAnswer(false);
   };
 
-  // --- RENDERING ---
-
+  // --- Render Logic ---
   if (gameState === 'setup') {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mt-8 mb-8">
-            <h1 className="text-6xl font-black mb-4 text-green-400">Trivia</h1>
-            <p className="text-xl text-gray-300">Test your knowledge with API-generated trivia questions</p>
-          </div>
+        <div className="max-w-2xl mx-auto text-center">
+          <h1 className="text-6xl font-black mb-4 text-green-400">Trivia</h1>
+          <p className="text-xl text-gray-300 mb-8">Test your knowledge with AI-generated trivia questions</p>
 
           <div className="bg-gray-800 rounded-2xl p-8 shadow-2xl border-2 border-gray-700">
-            {/* Categories */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-4 text-green-400">Categories</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {availableCategories.map(category => (
-                  <button
-                    key={category}
-                    onClick={() => toggleCategory(category)}
-                    className={`p-3 rounded-xl font-semibold transition-all duration-200 border-2 ${
-                      categories.includes(category)
-                        ? 'bg-green-500 text-black border-green-400 shadow-lg'
-                        : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600'
-                    }`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
+            <h2 className="text-2xl font-bold mb-4 text-green-400">Categories</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              {availableCategories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => toggleCategory(cat)}
+                  className={`p-3 rounded-xl font-semibold border-2 transition-all ${
+                    categories.includes(cat)
+                      ? 'bg-green-500 text-black border-green-400 shadow-lg'
+                      : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
             </div>
 
-            {/* Difficulty */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-4 text-green-400">Difficulty</h2>
-              <div className="flex gap-3">
-                {['easy', 'medium', 'hard'].map(diff => (
-                  <button
-                    key={diff}
-                    onClick={() => setDifficulty(diff)}
-                    className={`px-6 py-3 rounded-xl font-semibold transition-all duration-200 border-2 capitalize ${
-                      difficulty === diff
-                        ? 'bg-green-500 text-black border-green-400 shadow-lg'
-                        : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600'
-                    }`}
-                  >
-                    {diff}
-                  </button>
-                ))}
-              </div>
+            <h2 className="text-2xl font-bold mb-4 text-green-400">Difficulty</h2>
+            <div className="flex gap-3 mb-6">
+              {['easy', 'medium', 'hard'].map(diff => (
+                <button
+                  key={diff}
+                  onClick={() => setDifficulty(diff)}
+                  className={`px-6 py-3 rounded-xl font-semibold border-2 capitalize ${
+                    difficulty === diff
+                      ? 'bg-green-500 text-black border-green-400 shadow-lg'
+                      : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600'
+                  }`}
+                >
+                  {diff}
+                </button>
+              ))}
             </div>
 
-            {/* Number of Questions */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-4 text-green-400">Number of questions</h2>
-              <div className="flex gap-3">
-                {[5, 10, 15, 20].map(num => (
-                  <button
-                    key={num}
-                    onClick={() => setNumQuestions(num)}
-                    className={`px-6 py-3 rounded-xl font-semibold transition-all duration-200 border-2 ${
-                      numQuestions === num
-                        ? 'bg-green-500 text-black border-green-400 shadow-lg'
-                        : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600'
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
+            <h2 className="text-2xl font-bold mb-4 text-green-400">Number of questions</h2>
+            <div className="flex gap-3 mb-8">
+              {[5, 10, 15, 20].map(num => (
+                <button
+                  key={num}
+                  onClick={() => setNumQuestions(num)}
+                  className={`px-6 py-3 rounded-xl font-semibold border-2 ${
+                    numQuestions === num
+                      ? 'bg-green-500 text-black border-green-400 shadow-lg'
+                      : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600'
+                  }`}
+                >
+                  {num}
+                </button>
+              ))}
             </div>
 
             <button
               onClick={generateQuestions}
-              className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl transition-all duration-200 shadow-xl"
+              className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl shadow-xl"
             >
               Start game
             </button>
@@ -228,6 +204,7 @@ Respond ONLY with a JSON object like this:
 
   if (gameState === 'playing') {
     const question = questions[currentQuestion];
+
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
         <div className="max-w-3xl mx-auto">
@@ -241,51 +218,31 @@ Respond ONLY with a JSON object like this:
           </div>
 
           <div className="bg-gray-800 rounded-2xl p-8 shadow-2xl border-2 border-gray-700">
-            <div className="mb-6">
-              <span className="inline-block px-3 py-1 bg-green-500 text-black rounded-full text-sm font-semibold mb-4">
-                {question.category}
-              </span>
-              <h2 className="text-2xl font-bold leading-relaxed">{question.question}</h2>
-            </div>
+            <span className="inline-block px-3 py-1 bg-green-500 text-black rounded-full text-sm font-semibold mb-4">
+              {question.category}
+            </span>
+            <h2 className="text-2xl font-bold leading-relaxed mb-6">{question.question}</h2>
 
             <div className="space-y-4 mb-8">
-              {question.options.map((option, index) => {
-                let buttonClass = 'w-full p-4 rounded-xl font-semibold text-left transition-all duration-200 border-2 ';
-                let showCheckmark = false;
-
+              {question.options.map((opt, idx) => {
+                let btnClass = 'w-full p-4 rounded-xl font-semibold text-left border-2 transition-all ';
                 if (showAnswer) {
-                  if (index === question.correctAnswer) {
-                    buttonClass += 'bg-green-500 text-black border-green-400 shadow-lg';
-                    showCheckmark = selectedAnswer === question.correctAnswer;
-                  } else if (index === selectedAnswer && index !== question.correctAnswer) {
-                    buttonClass += 'bg-red-500 text-white border-red-400 shadow-lg';
-                  } else {
-                    buttonClass += 'bg-gray-600 text-gray-300 border-gray-500';
-                  }
+                  if (idx === question.correctAnswer) btnClass += 'bg-green-500 text-black border-green-400 shadow-lg';
+                  else if (idx === selectedAnswer) btnClass += 'bg-red-500 text-white border-red-400 shadow-lg';
+                  else btnClass += 'bg-gray-600 text-gray-300 border-gray-500';
                 } else {
-                  if (selectedAnswer === index) {
-                    buttonClass += 'bg-green-500 text-black border-green-400 shadow-lg';
-                  } else {
-                    buttonClass += 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600';
-                  }
+                  btnClass += selectedAnswer === idx
+                    ? 'bg-green-500 text-black border-green-400 shadow-lg'
+                    : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600';
                 }
 
                 return (
                   <button
-                    key={index}
-                    onClick={() => !showAnswer && selectAnswer(index)}
-                    disabled={showAnswer}
-                    className={buttonClass}
+                    key={idx}
+                    onClick={() => !showAnswer && selectAnswer(idx)}
+                    className={btnClass}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-black mr-3">{String.fromCharCode(65 + index)}.</span>
-                        {option}
-                      </div>
-                      <div className="text-xl">
-                        {showCheckmark && '✔️'}
-                      </div>
-                    </div>
+                    {opt}
                   </button>
                 );
               })}
@@ -293,9 +250,9 @@ Respond ONLY with a JSON object like this:
 
             <button
               onClick={nextQuestion}
-              className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl transition-all duration-200 shadow-xl"
+              className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl shadow-xl"
             >
-              {currentQuestion + 1 === questions.length && showAnswer ? 'See results' : showAnswer ? 'Next question' : 'Check answer'}
+              {showAnswer ? (currentQuestion + 1 === questions.length ? 'See Results' : 'Next Question') : 'Check Answer'}
             </button>
           </div>
         </div>
@@ -305,16 +262,14 @@ Respond ONLY with a JSON object like this:
 
   if (gameState === 'results') {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-4 flex flex-col items-center justify-center">
-        <h2 className="text-6xl font-black text-green-400 mb-4">Game Over</h2>
-        <p className="text-xl text-gray-300 mb-8">
-          Your score: {score} / {questions.length}
-        </p>
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
+        <h2 className="text-4xl font-bold text-green-400 mb-4">Game Over!</h2>
+        <p className="text-xl text-gray-300 mb-8">Your score: {score} / {questions.length}</p>
         <button
           onClick={resetGame}
-          className="bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl transition-all duration-200 shadow-xl"
+          className="bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl shadow-xl"
         >
-          Play again
+          Play Again
         </button>
       </div>
     );
