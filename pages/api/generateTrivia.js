@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     // Start streaming content
     const response = await ai.models.generateContentStream({
-      model: 'gemma3-27b-it',
+      model: 'gemma-3-27b-it',
       contents: prompt,
     });
 
