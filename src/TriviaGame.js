@@ -25,6 +25,7 @@ const TriviaGame = () => {
     );
   };
 
+  // --- Updated generateQuestions with streaming support ---
   const generateQuestions = async () => {
     if (categories.length === 0) {
       alert('Please select at least one category!');
@@ -51,15 +52,32 @@ Return the result as a JSON object in this exact format:
 }
 Do not include anything else outside the JSON object.`;
 
-      // Call server-side API
       const response = await fetch('/api/generateTrivia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       });
 
-      const data = await response.json();
-      const jsonResponse = JSON.parse(data.text);
+      if (!response.body) throw new Error('ReadableStream not supported');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value);
+          console.log('Chunk received:', chunk); // log each chunk
+          fullText += chunk;
+        }
+      }
+
+      console.log('Full text:', fullText);
+
+      const jsonResponse = JSON.parse(fullText);
 
       if (jsonResponse.questions && Array.isArray(jsonResponse.questions)) {
         setQuestions(jsonResponse.questions);
@@ -228,20 +246,15 @@ Do not include anything else outside the JSON object.`;
                 let btnClass = 'w-full p-4 rounded-xl font-semibold text-left border-2 transition-all ';
                 if (showAnswer) {
                   if (idx === question.correctAnswer) btnClass += 'bg-green-500 text-black border-green-400 shadow-lg';
-                  else if (idx === selectedAnswer) btnClass += 'bg-red-500 text-white border-red-400 shadow-lg';
-                  else btnClass += 'bg-gray-600 text-gray-300 border-gray-500';
+                  else if (idx === selectedAnswer) btnClass += 'bg-red-500 text-black border-red-400';
+                  else btnClass += 'bg-gray-700 text-white border-gray-600';
                 } else {
                   btnClass += selectedAnswer === idx
                     ? 'bg-green-500 text-black border-green-400 shadow-lg'
                     : 'bg-gray-700 text-white border-gray-600 hover:border-green-400 hover:bg-gray-600';
                 }
-
                 return (
-                  <button
-                    key={idx}
-                    onClick={() => !showAnswer && selectAnswer(idx)}
-                    className={btnClass}
-                  >
+                  <button key={idx} onClick={() => selectAnswer(idx)} className={btnClass}>
                     {opt}
                   </button>
                 );
@@ -252,7 +265,7 @@ Do not include anything else outside the JSON object.`;
               onClick={nextQuestion}
               className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl shadow-xl"
             >
-              {showAnswer ? (currentQuestion + 1 === questions.length ? 'See Results' : 'Next Question') : 'Check Answer'}
+              {showAnswer ? (currentQuestion + 1 === questions.length ? 'Finish' : 'Next') : 'Check Answer'}
             </button>
           </div>
         </div>
@@ -263,8 +276,8 @@ Do not include anything else outside the JSON object.`;
   if (gameState === 'results') {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-        <h2 className="text-4xl font-bold text-green-400 mb-4">Game Over!</h2>
-        <p className="text-xl text-gray-300 mb-8">Your score: {score} / {questions.length}</p>
+        <h2 className="text-4xl font-black text-green-400 mb-6">Game Over!</h2>
+        <p className="text-xl mb-6">You scored {score} out of {questions.length}</p>
         <button
           onClick={resetGame}
           className="bg-green-500 hover:bg-green-400 text-black font-black py-4 px-8 rounded-xl text-xl shadow-xl"
@@ -279,3 +292,4 @@ Do not include anything else outside the JSON object.`;
 };
 
 export default TriviaGame;
+                  
